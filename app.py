@@ -274,6 +274,20 @@ def delete_course(course_id):
 
 
 # ---------------------------------------------------------------------------
+# CORS: lets the HTML dashboard (served from another port, e.g. Live Server on
+# 5500) call this API. Without these headers the browser blocks the requests.
+# "*" means "any website may call me" - fine for learning, not for production.
+# ---------------------------------------------------------------------------
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Error handlers: make sure errors come back as JSON, not HTML pages
 # ---------------------------------------------------------------------------
 
