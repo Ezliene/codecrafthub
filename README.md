@@ -51,6 +51,9 @@ Together these four methods are called **CRUD**: Create, Read, Update, Delete. C
 - ✅ Input validation (required fields, valid status, valid date)
 - ✅ Clear JSON error messages with correct HTTP status codes
 - ✅ Safe file writing and handling of file read/write errors
+- ✅ Statistics endpoint: total courses and a count per status
+- ✅ Web dashboard (`index.html`) to add, edit, and remove courses from the browser
+- ✅ Docker support, so the API runs the same way on any computer
 - ✅ No login or user accounts, so you can focus on REST basics
 
 ---
@@ -120,6 +123,46 @@ You should see:
 - **Stop the server** with `Ctrl + C`.
 - Quick check: open <http://127.0.0.1:5000/api/courses> in your browser. You should see `[]`.
 
+### 4.1 Run with Docker 🐳
+
+Docker packages the API and everything it needs into one container, so it runs the same on any computer.
+
+**You need:** [Docker Desktop](https://www.docker.com/products/docker-desktop/). On Windows it also needs WSL (`wsl --install` in an administrator PowerShell, then restart).
+
+From the project folder:
+
+```bash
+# 1. Build the image (one time, or after changing the code)
+docker build -t codecrafthub .
+
+# 2. Run the container
+docker run -d -p 5000:5000 -v codecrafthub-data:/data --name codecrafthub codecrafthub
+```
+
+- `-p 5000:5000` makes the API available at <http://localhost:5000>
+- `-v codecrafthub-data:/data` is a **volume**: storage that keeps `courses.json` even if the container is deleted
+- Stop the normal `python app.py` first so port 5000 is free
+
+| Command | What it does |
+|---------|--------------|
+| `docker ps` | Show running containers |
+| `docker logs codecrafthub` | See the app's output |
+| `docker stop codecrafthub` | Stop the container |
+| `docker start codecrafthub` | Start it again |
+| `docker rm -f codecrafthub` | Delete the container (the volume and your data stay) |
+
+Settings the container uses (set in the `Dockerfile`): `HOST=0.0.0.0`, `FLASK_DEBUG=0`, `DATA_FILE=/data/courses.json`.
+
+### 4.2 Use the Dashboard 🖥️
+
+`index.html` is a single-page dashboard that talks to the API.
+
+1. Make sure the API is running (with `python app.py` or Docker)
+2. Open `index.html`: right-click it in VS Code and choose **Open with Live Server**, or just double-click the file
+3. Add, edit, and remove courses with the buttons
+
+The dashboard expects the API at `http://localhost:5000/api/courses`. If you use another port, change `API_URL` at the top of the `<script>` section.
+
 ---
 
 ## 5. API Documentation
@@ -132,6 +175,7 @@ You should see:
 |--------|----------|--------------|--------------|
 | `POST` | `/api/courses` | Add a new course | `201 Created` |
 | `GET` | `/api/courses` | Get all courses | `200 OK` |
+| `GET` | `/api/courses/stats` | Get course statistics | `200 OK` |
 | `GET` | `/api/courses/<id>` | Get one course | `200 OK` |
 | `PUT` | `/api/courses/<id>` | Update a course | `200 OK` |
 | `DELETE` | `/api/courses/<id>` | Delete a course | `200 OK` |
@@ -283,7 +327,40 @@ curl -i -X DELETE http://127.0.0.1:5000/api/courses/1
 
 ---
 
-### 5.6 Error responses
+### 5.6 Get statistics: `GET /api/courses/stats`
+
+Returns the total number of courses and how many have each status.
+
+**PowerShell:**
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:5000/api/courses/stats
+```
+
+**curl:**
+
+```bash
+curl -i http://127.0.0.1:5000/api/courses/stats
+```
+
+**Response: `200 OK`**
+
+```json
+{
+  "total": 4,
+  "by_status": {
+    "Not Started": 1,
+    "In Progress": 2,
+    "Completed": 1
+  }
+}
+```
+
+With no courses, `total` is `0` and every status is `0`.
+
+---
+
+### 5.7 Error responses
 
 Every error comes back as JSON with an `error` message:
 
@@ -300,7 +377,7 @@ Every error comes back as JSON with an `error` message:
 | `405 Method Not Allowed` | Right URL, wrong method | `DELETE /api/courses` (no ID) |
 | `500 Internal Server Error` | Problem on the server | `courses.json` can't be read or is corrupted |
 
-### 5.7 Validation rules
+### 5.8 Validation rules
 
 - `name`, `description`: required, must be non-empty text
 - `target_date`: must be a real date written as `YYYY-MM-DD` (e.g. `2026-12-31`; `2026-02-30` is rejected)
@@ -356,6 +433,11 @@ Run these in order:
 | `404` on a URL that looks right | Typo, or ID doesn't exist | Check the URL starts with `/api/courses`. IDs must be numbers |
 | `500` "courses.json is corrupted" | The file contains invalid JSON | Open `courses.json`, replace everything with `[]`, save. (Or delete the file. It's recreated automatically) |
 | Changes to `app.py` don't show up | Server wasn't restarted | Stop with `Ctrl + C` and run `python app.py` again. (Debug mode usually auto-reloads) |
+| `docker is not recognized` | Docker Desktop isn't installed or open | Install and open Docker Desktop, then restart VS Code |
+| Docker Desktop says "WSL not installed" | Windows needs WSL | Run `wsl --install` in an **administrator** PowerShell, then restart the computer |
+| `port is already allocated` | `python app.py` (or an old container) is still using port 5000 | Stop it with `Ctrl + C`, or run `docker rm -f codecrafthub` |
+| `container name "/codecrafthub" is already in use` | An old container has that name | Run `docker rm -f codecrafthub`, then run again |
+| Dashboard shows "Cannot reach the server" | API isn't running, or wrong port | Start the API and check `API_URL` in `index.html` |
 | Browser shows nothing / can't connect | Server isn't running | Check the first terminal shows `Running on http://127.0.0.1:5000` |
 
 ---
@@ -365,8 +447,11 @@ Run these in order:
 ```
 codecrafthub/
 ├── app.py            # The whole application: routes, validation, file handling
+├── index.html        # The web dashboard (HTML + CSS + JavaScript in one file)
+├── Dockerfile        # Recipe for building the Docker image
+├── .dockerignore     # Files Docker should leave out of the image
+├── requirements.txt  # Python dependencies (Flask)
 ├── courses.json      # Your data. Created automatically on first run
-├── requirements.txt  # (optional) Python dependencies: just "flask"
 └── README.md         # This file
 ```
 
@@ -406,7 +491,7 @@ This is a learning project, so some things are intentionally simple:
 
 - Filter courses by status (`GET /api/courses?status=Completed`)
 - Sort by `target_date`
-- Add a simple HTML page that talks to the API
+- Deploy the Docker container to a free cloud service
 - Swap the JSON file for SQLite
 - Write automated tests with `pytest`
 

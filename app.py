@@ -25,7 +25,8 @@ app = Flask(__name__)
 # Build the path from this file's location, so courses.json is always found
 # no matter which folder you run the app from.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, "courses.json")
+# DATA_FILE env var lets Docker point this at a mounted folder; default is next to app.py.
+DATA_FILE = os.environ.get("DATA_FILE", os.path.join(BASE_DIR, "courses.json"))
 
 # The only values allowed for "status"
 VALID_STATUSES = ["Not Started", "In Progress", "Completed"]
@@ -50,6 +51,7 @@ def init_data_file():
     """Create courses.json (with an empty list) if it doesn't exist yet."""
     if not os.path.exists(DATA_FILE):
         try:
+            os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)  # make sure the folder exists
             with open(DATA_FILE, "w") as f:
                 json.dump([], f)
         except OSError as e:
@@ -321,4 +323,9 @@ def handle_server_error(e):
 
 if __name__ == "__main__":
     init_data_file()  # create courses.json on startup if it's missing
-    app.run(debug=True)  # debug=True auto-reloads on changes (dev only!)
+    # Defaults are for running on your own computer. Docker overrides them:
+    #   HOST=0.0.0.0 -> accept connections from outside the container
+    #   FLASK_DEBUG=0 -> debug mode off (never leave it on in a shared/public setup)
+    host = os.environ.get("HOST", "127.0.0.1")
+    debug = os.environ.get("FLASK_DEBUG", "1") == "1"
+    app.run(host=host, debug=debug)
